@@ -1,7 +1,7 @@
 {
   "name": "sfdc-pps-reconciliation",
   "version": "2.0.0",
-  "description": "display inconsistency between sources and profile & permission set",
+  "description": "Display inconsistency between sources and profile & permission set",
   "keyword": [
     "salesforce",
     "profile",

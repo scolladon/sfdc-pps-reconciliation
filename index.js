@@ -5,23 +5,44 @@ const asyncReadDir = require('./lib/utils/async-read-dir');
 const asyncXmlParser = require('./lib/utils/async-xml-parser');
 const path = require('path');
 
-const directories = [
-  'applications',
-  'classes',
-  'customPermissions',
-  'dataSources',
-  'layouts',
-  'objects',
-  'pages',
-  'permissionsets',
-  'profiles',
-  'tabs'
-];
 
-const inDepth = [
-  'objects',
+const metaMapping = {
+  'objects' : {'objectPermissions' : 'object','fieldPermissions' : 'field','recordTypeVisibilities' : 'recordType'},
+  'classes' : {'classAccesses' : 'apexClass'},
+  'layouts' : {'layoutAssignments' : 'layout'},
+  'pages' : {'pageAccesses' : 'apexPage'},
+  'tabs' : {'tabVisibilities' : 'tab'}
+}
+
+let pps = [
   'permissionsets',
   'profiles'
+];
+
+const inFiles = [
+  'objects'
+];
+
+const inFolders = [
+  'classes',
+  'layouts',
+  'pages',
+  'tabs'
+];
+;
+const metadatas = [
+  ...inFiles,
+  ...inFolders
+]
+
+const inDepth = [
+  ...pps,
+  ...inFiles
+];
+
+const directories = [
+  ...metadatas,
+  ...pps
 ];
 
 const result = directories.reduce((tab, item) => {
@@ -44,8 +65,19 @@ module.exports = (config,logger) => {
     .then(files => Promise.all([].concat.apply([], files).filter(file => typeof file != 'undefined' && !file.endsWith('-meta.xml')).map(file => ~inDepth.indexOf(path.basename(path.dirname(file))) ? asyncReadFile(file).then(asyncXmlParser) : {'name':file})))
     .then(files => files.forEach(file => result[path.basename(path.dirname(file.name))][path.basename(file.name.replace(/\.[^/.]+$/, ''))] = file.content))
     .then(()=>{
-      console.log(result)
-      // TODO treatment with result here;
+      metadatas.filter(type => metaMapping.hasOwnProperty(type)).forEach(type => {
+        const inFile = Object.keys(result[type]);
+        for(const pType of pps){
+          for(const pName in result[pType]){
+            const permissions = result[pType][pName][Object.keys(result[pType][pName])[0]];
+            for(const permissionDef in metaMapping[type]) if (permissions.hasOwnProperty(permissionDef)){
+              const inPerm = permissions[permissionDef].filter(aDef => aDef.hasOwnProperty(metaMapping[type][permissionDef])).map(aDef => aDef[metaMapping[type][permissionDef]][0]);
+              inFile.filter(x => inPerm.indexOf(x) == -1).map(x=>logger(type + '.' + x + ' access definition missing in ' + pName+'.'+pType));
+              inPerm.filter(x => inFile.indexOf(x) == -1).map(x=>logger(type + '.' + x + ' is defined in ' + pName+'.'+pType + ' but not present in src'));
+            }
+          }
+        }
+      });
     })
     .then(resolve)
     .catch(reject)
